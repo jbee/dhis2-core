@@ -36,6 +36,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.core.Every.everyItem;
 import static org.hisp.dhis.tracker.TrackerImportStrategy.CREATE_AND_UPDATE;
 import static org.hisp.dhis.tracker.TrackerImportStrategy.UPDATE;
+import static org.hisp.dhis.tracker.report.TrackerErrorCode.E1029;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -901,6 +902,18 @@ public class EventImportValidationTest
         } );
     }
 
+    @Test
+    public void testUpdateDeleteEventFails()
+    {
+        testDeletedEventFails( UPDATE );
+    }
+
+    @Test
+    public void testInserDeleteEventFails()
+    {
+        testDeletedEventFails( CREATE_AND_UPDATE );
+    }
+
     @SneakyThrows
     private void testDeletedEventFails( TrackerImportStrategy importStrategy )
     {
@@ -926,16 +939,17 @@ public class EventImportValidationTest
     }
 
     @Test
-    public void testUpdateDeleteEventFails()
+    @SneakyThrows
+    public void testImportFailsOnOuNotMatchingProgramOu()
     {
-        testDeletedEventFails( UPDATE );
-    }
-
-    @Test
-    public void testInserDeleteEventFails()
-        throws IOException
-    {
-        testDeletedEventFails( CREATE_AND_UPDATE );
+        TrackerImportParams trackerBundleParams = createBundleFromJson(
+            "tracker/validations/events-with-ou-not-in-program.json" );
+        ValidateAndCommitTestUnit createAndUpdate = validateAndCommit( trackerBundleParams, CREATE_AND_UPDATE );
+        assertEquals( 0, createAndUpdate.getTrackerBundle().getEvents().size() );
+        TrackerValidationReport report = createAndUpdate.getValidationReport();
+        printReport( report );
+        assertEquals( 1, report.getErrorReports().size() );
+        assertThat( report.getErrorReports(), everyItem( hasProperty( "errorCode", equalTo( E1029 ) ) ) );
     }
 
     private ValidateAndCommitTestUnit createEvent( String jsonPayload )
