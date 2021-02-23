@@ -53,8 +53,9 @@ import org.springframework.util.Assert;
 import com.google.common.primitives.Primitives;
 
 /**
- * A {@link PropertyIntrospector} adds information to existing {@link Property}
- * values if they are annotated with one of the following annotations:
+ * A {@link PropertyIntrospector} which adds information to existing
+ * {@link Property} values if they are annotated with one of the following
+ * annotations:
  *
  * <ul>
  * <li>{@link org.hisp.dhis.schema.annotation.Property}</li>
@@ -120,7 +121,7 @@ public class PropertyPropertyIntrospector implements PropertyIntrospector
 
         if ( property.getMax() == null )
         {
-            property.setMax( property.is( PropertyType.INTEGER, PropertyType.TEXT )
+            property.setMax( property.isAnyOf( PropertyType.INTEGER, PropertyType.TEXT )
                 ? (double) Integer.MAX_VALUE
                 : Double.MAX_VALUE );
         }
@@ -142,7 +143,7 @@ public class PropertyPropertyIntrospector implements PropertyIntrospector
             double min = range.min();
 
             if ( max > Integer.MAX_VALUE
-                && property.is( PropertyType.INTEGER, PropertyType.TEXT, PropertyType.COLLECTION ) )
+                && property.isAnyOf( PropertyType.INTEGER, PropertyType.TEXT, PropertyType.COLLECTION ) )
             {
                 max = Integer.MAX_VALUE;
             }

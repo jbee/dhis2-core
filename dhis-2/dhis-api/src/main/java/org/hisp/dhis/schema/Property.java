@@ -837,7 +837,7 @@ public class Property implements Ordered, Klass
         return propertyType != null && propertyType.equals( this.propertyType );
     }
 
-    public boolean is( PropertyType... anyOf )
+    public boolean isAnyOf( PropertyType... anyOf )
     {
         for ( PropertyType type : anyOf )
         {
