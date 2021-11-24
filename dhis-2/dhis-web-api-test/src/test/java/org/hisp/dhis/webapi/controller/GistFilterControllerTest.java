@@ -314,4 +314,67 @@ public class GistFilterControllerTest extends AbstractGistControllerTest
         assertTrue( users.has( "id", "userCredentials" ) );
         assertTrue( users.getObject( "userCredentials" ).has( "username", "twoFA" ) );
     }
+
+    @Test
+    public void testFilter_EqLength()
+    {
+        createDataSetsForOrganisationUnit( orgUnitId, "Peter", "Paul", "Mary", "Ringo", "John", "George" );
+
+        assertEquals( asList( "John", "Mary", "Paul", "set1" ),
+            GET( "/dataSets/gist?fields=name&filter=name:eq:4&headless=true&order=name" ).content().stringValues() );
+        assertEquals( asList( "Peter", "Ringo" ),
+            GET( "/dataSets/gist?fields=name&filter=name:eq:5&headless=true&order=name" ).content().stringValues() );
+        assertEquals( asList( "George" ),
+            GET( "/dataSets/gist?fields=name&filter=name:eq:6&headless=true&order=name" ).content().stringValues() );
+    }
+
+    @Test
+    public void testFilter_NeqLength()
+    {
+        createDataSetsForOrganisationUnit( orgUnitId, "Peter", "Paul", "Mary", "Ringo", "John", "George" );
+
+        assertEquals( asList( "George", "Peter", "Ringo" ),
+            GET( "/dataSets/gist?fields=name&filter=name:neq:4&headless=true&order=name" ).content().stringValues() );
+        assertEquals( asList( "George", "John", "Mary", "Paul", "set1" ),
+            GET( "/dataSets/gist?fields=name&filter=name:neq:5&headless=true&order=name" ).content().stringValues() );
+        assertEquals( asList( "John", "Mary", "Paul", "Peter", "Ringo", "set1" ),
+            GET( "/dataSets/gist?fields=name&filter=name:neq:6&headless=true&order=name" ).content().stringValues() );
+    }
+
+    @Test
+    public void testFilter_GeLength()
+    {
+        createDataSetsForOrganisationUnit( orgUnitId, "Peter", "Paul", "Mary", "Ringo", "John", "George" );
+
+        assertEquals( asList( "George", "Peter", "Ringo" ),
+            GET( "/dataSets/gist?fields=name&filter=name:ge:5&headless=true&order=name" ).content().stringValues() );
+    }
+
+    @Test
+    public void testFilter_GtLength()
+    {
+        createDataSetsForOrganisationUnit( orgUnitId, "Peter", "Paul", "Mary", "Ringo", "John", "George" );
+
+        assertEquals( asList( "George", "Peter", "Ringo" ),
+            GET( "/dataSets/gist?fields=name&filter=name:gt:4&headless=true&order=name" ).content().stringValues() );
+    }
+
+    @Test
+    public void testFilter_LtLength()
+    {
+        createDataSetsForOrganisationUnit( orgUnitId, "Peter", "Paul", "Mary", "Ringo", "John", "George" );
+
+        assertEquals( asList( "John", "Mary", "Paul", "set1" ),
+            GET( "/dataSets/gist?fields=name&filter=name:lt:5&headless=true&order=name" ).content().stringValues() );
+    }
+
+    @Test
+    public void testFilter_LeLength()
+    {
+        createDataSetsForOrganisationUnit( orgUnitId, "Peter", "Paul", "Mary", "Ringo", "John", "George" );
+
+        assertEquals( asList( "John", "Mary", "Paul", "set1" ),
+            GET( "/dataSets/gist?fields=name&filter=name:le:4&headless=true&order=name" ).content().stringValues() );
+    }
+
 }
