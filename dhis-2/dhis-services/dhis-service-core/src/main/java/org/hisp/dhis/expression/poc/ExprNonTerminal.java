@@ -1,94 +1,117 @@
 package org.hisp.dhis.expression.poc;
 
+import org.hisp.dhis.expression.poc.ExprContext.ExprType;
+
 import java.util.ArrayList;
 import java.util.List;
 
-public class ExprNonTerminal
+interface ExprNonTerminal
 {
 
-    static Object expr( Expr expr, ExprContext ctx )
+    Object eval( Expr expr, ExprContext ctx );
+
+    default ExprNonTerminal list()
     {
-        expr.skipWS();
-        char c = expr.peek();
-        if ( c == '(' )
-        {
-            expr.gobble();
-            Object res = expr( expr, ctx );
+        return list( this );
+    }
+
+    default ExprNonTerminal inWS()
+    {
+        return ( expr, ctx ) -> {
             expr.skipWS();
-            expr.expect( ')' );
+            Object res = eval( expr, ctx );
             expr.skipWS();
             return res;
-        }
-        // unary operators
-        if ( Expr.isOperator( c ) )
-        {
-            expr.gobble();
-            //TODO return ctx.unary(c, expr(expr, ctx));
-        }
-        // should be a top level function then...
-        String name = expr.NAME_LITERAL();
-        ExprFunction fn = ctx.getTopLevelFunction( name );
-        if ( fn == null )
-        {
-            expr.error( "unknown function: " + name );
-        }
-        Object left = fn.eval( expr, ctx );
-        c = expr.peek();
-        if ( Expr.isOperator( c ) )
-        {
-            String op = expr.OPERATOR_LITERAL();
-            Object right = expr( expr, ctx );
-            return null; // TODO ctx.power( left, right );
-        }
-        expr.skipWS();
-        return left;
+        };
     }
 
-    static List<Object> expr_list( Expr expr, ExprContext ctx )
+    default ExprNonTerminal in( char open, char close )
     {
-        Object first = expr( expr, ctx );
-        char c = expr.peek();
-        if ( c != ',' )
-        {
-            return List.of( first );
-        }
-        List<Object> list = new ArrayList<>();
-        while ( (c == ',') )
-        {
-            list.add( expr( expr, ctx ) );
-            c = expr.peek();
-        }
-        return list;
+        return in( open, this, close );
     }
 
-    static List<Object> expr_expr( Expr expr, ExprContext ctx )
+    default ExprNonTerminal inRound()
     {
-        Object p0 = expr( expr, ctx );
-        expr.expect( ',' );
-        Object p1 = expr( expr, ctx );
-        return List.of( p0, p1 );
+        return in( '(', ')' );
     }
 
-    static List<Object> expr_expr_expr( Expr expr, ExprContext ctx )
+    default ExprNonTerminal inCurly()
     {
-        Object p0 = expr( expr, ctx );
-        expr.expect( ',' );
-        Object p1 = expr( expr, ctx );
-        expr.expect( ',' );
-        Object p2 = expr( expr, ctx );
-        return List.of( p0, p1, p2 );
+        return in( '{', '}' );
     }
 
-    static List<Object> expr_maybe_expr( Expr expr, ExprContext ctx )
+    static ExprNonTerminal fn( String name, ExprNonTerminal is )
     {
-        Object p0 = expr( expr, ctx );
-        if ( expr.peek() != ',' )
+        return let( ExprType.FN, name, is.inRound() );
+    }
+
+    static ExprNonTerminal let( ExprType type, String name, ExprNonTerminal be )
+    {
+        return ( expr, ctx ) -> {
+            ctx.open( type, name );
+            Object res = be.eval( expr, ctx );
+            ctx.close();
+            return res;
+        };
+    }
+
+    static ExprNonTerminal in( char open, ExprNonTerminal body, char close )
+    {
+        return ( expr, ctx ) -> {
+            expr.expect( open );
+            Object res = body.eval( expr, ctx );
+            expr.expect( close );
+            return res;
+        };
+    }
+
+    static ExprNonTerminal list( ExprNonTerminal of )
+    {
+        return ( expr, ctx ) -> {
+            Object first = of.eval( expr, ctx );
+            expr.skipWS();
+            char c = expr.peek();
+            if ( c != ',' )
+            {
+                return List.of( first );
+            }
+            List<Object> list = new ArrayList<>();
+            while ( (c == ',') )
+            {
+                list.add( of.eval( expr, ctx ) );
+                expr.skipWS();
+                c = expr.peek();
+            }
+            return list;
+        };
+    }
+
+    static ExprNonTerminal seq( ExprNonTerminal... elements )
+    {
+        if ( elements.length == 1 )
         {
-            return List.of( p0 );
+            return elements[0];
         }
-        expr.expect( ',' );
-        Object p1 = expr( expr, ctx );
-        return List.of( p0, p1 );
+        return ( expr, ctx ) -> {
+            Object[] values = new Object[elements.length];
+            for ( int i = 0; i < values.length; i++ )
+            {
+                values[i] = elements[i].eval( expr, ctx );
+            }
+            return List.of( values );
+        };
+    }
+
+    static ExprNonTerminal maybe( char when, ExprNonTerminal then )
+    {
+        return ( expr, ctx ) -> {
+            if ( expr.peek() != when )
+            {
+                return null;
+            }
+            expr.expect( when );
+            return then.eval( expr, ctx );
+        };
     }
 
 }
