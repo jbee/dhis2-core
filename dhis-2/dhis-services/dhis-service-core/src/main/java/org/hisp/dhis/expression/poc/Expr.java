@@ -1,7 +1,5 @@
 package org.hisp.dhis.expression.poc;
 
-import java.util.List;
-
 final class Expr
 {
     public static final char EOF = 0;
@@ -31,18 +29,18 @@ final class Expr
     Non-Terminals
      */
 
-    static Object expr( Expr expr, ExprContext ctx )
+    static void expr( Expr expr, ExprContext ctx )
     {
         expr.skipWS();
         char c = expr.peek();
         if ( c == '(' )
         {
             expr.gobble();
-            Object res = expr( expr, ctx );
+            expr( expr, ctx );
             expr.skipWS();
             expr.expect( ')' );
             expr.skipWS();
-            return res;
+            return;
         }
         // unary operators
         if ( Expr.isOperator( c ) )
@@ -57,46 +55,15 @@ final class Expr
         {
             expr.error( "unknown function: " + name );
         }
-        Object left = fn.eval( expr, ctx );
+        fn.parse( expr, ctx );
         c = expr.peek();
         if ( Expr.isOperator( c ) )
         {
             String op = expr.OPERATOR_LITERAL();
-            Object right = expr( expr, ctx );
-            return null; // TODO ctx.power( left, right );
+            expr( expr, ctx );
+            return; // TODO ctx.power( left, right );
         }
         expr.skipWS();
-        return left;
-    }
-
-    static List<Object> expr_expr( Expr expr, ExprContext ctx )
-    {
-        Object p0 = expr( expr, ctx );
-        expr.expect( ',' );
-        Object p1 = expr( expr, ctx );
-        return List.of( p0, p1 );
-    }
-
-    static List<Object> expr_expr_expr( Expr expr, ExprContext ctx )
-    {
-        Object p0 = expr( expr, ctx );
-        expr.expect( ',' );
-        Object p1 = expr( expr, ctx );
-        expr.expect( ',' );
-        Object p2 = expr( expr, ctx );
-        return List.of( p0, p1, p2 );
-    }
-
-    static List<Object> expr_maybe_expr( Expr expr, ExprContext ctx )
-    {
-        Object p0 = expr( expr, ctx );
-        if ( expr.peek() != ',' )
-        {
-            return List.of( p0 );
-        }
-        expr.expect( ',' );
-        Object p1 = expr( expr, ctx );
-        return List.of( p0, p1 );
     }
 
     private final char[] expr;
@@ -252,6 +219,28 @@ final class Expr
         }
         error( "expected operator" );
         return null;
+    }
+
+    String LITERAL( ExprType type )
+    {
+        switch ( type )
+        {
+        case NUMERIC_LITERAL:
+            return NUMERIC_LITERAL();
+        case STRING_LITERAL:
+            return null; //TODO
+        case BOOLEAN_LITERAL:
+            return BOOLEAN_LITERAL();
+        case DATE_LITERAL:
+            return DATE_LITERAL();
+        case UID:
+            return UID_LITERAL();
+        case IDENTIFIER:
+            return INTEGER_LITERAL();
+        default:
+            error( "Not a literal type: " + type );
+            return null;
+        }
     }
 
     String NAME_LITERAL()

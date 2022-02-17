@@ -1,27 +1,76 @@
 package org.hisp.dhis.expression.poc;
 
-import org.hisp.dhis.expression.poc.ExprContext.ExprType;
+import java.util.Map;
 
-import java.util.ArrayList;
-import java.util.List;
-
+@FunctionalInterface
 interface ExprNonTerminal
 {
+    void parse( Expr expr, ExprContext ctx );
 
-    Object eval( Expr expr, ExprContext ctx );
-
-    default ExprNonTerminal list()
+    default boolean isMaybe()
     {
-        return list( this );
+        return false;
+    }
+
+    default String name()
+    {
+        return null;
+    }
+
+    default ExprNonTerminal maybe()
+    {
+        ExprNonTerminal self = this;
+        return new ExprNonTerminal()
+        {
+            @Override
+            public void parse( Expr expr, ExprContext ctx )
+            {
+                self.parse( expr, ctx );
+            }
+
+            @Override
+            public boolean isMaybe()
+            {
+                return true;
+            }
+        };
+    }
+
+    default ExprNonTerminal named( String name )
+    {
+        class Named implements ExprNonTerminal
+        {
+            final String name;
+
+            private ExprNonTerminal body;
+
+            Named( String name, ExprNonTerminal body )
+            {
+                this.name = name;
+                this.body = body;
+            }
+
+            @Override
+            public void parse( Expr expr, ExprContext ctx )
+            {
+                body.parse( expr, ctx );
+            }
+
+            @Override
+            public String name()
+            {
+                return name;
+            }
+        }
+        return new Named( name, this instanceof Named ? ((Named) this).body : this );
     }
 
     default ExprNonTerminal inWS()
     {
         return ( expr, ctx ) -> {
             expr.skipWS();
-            Object res = eval( expr, ctx );
+            parse( expr, ctx );
             expr.skipWS();
-            return res;
         };
     }
 
@@ -40,78 +89,118 @@ interface ExprNonTerminal
         return in( '{', '}' );
     }
 
-    static ExprNonTerminal fn( String name, ExprNonTerminal is )
+    static ExprNonTerminal fn( String name, ExprNonTerminal... args )
     {
-        return let( ExprType.FN, name, is.inRound() );
+        return let( ExprType.FN, name, args ).inRound();
     }
 
-    static ExprNonTerminal let( ExprType type, String name, ExprNonTerminal be )
+    static ExprNonTerminal aggFn( String name, ExprNonTerminal... args )
     {
-        return ( expr, ctx ) -> {
-            ctx.open( type, name );
-            Object res = be.eval( expr, ctx );
-            ctx.close();
-            return res;
+        return let( ExprType.AGG_FN, name, args ).inRound();
+    }
+
+    static ExprNonTerminal let( ExprType type, String name, ExprNonTerminal... args )
+    {
+        ExprNonTerminal res = ( expr, ctx ) -> {
+            ctx.begin( type, name );
+            for ( int i = 0; i < args.length; i++ )
+            {
+                expr.skipWS();
+                ExprNonTerminal arg = args[i];
+                if ( i > 0 )
+                {
+                    char c = expr.peek();
+                    if ( c != ',' )
+                    {
+                        if ( arg.isMaybe() )
+                        {
+                            return;
+                        }
+                        expr.error( "Expected more arguments" );
+                    }
+                    expr.skipWS();
+                }
+                String argName = arg.name();
+                ctx.begin( ExprType.ARG, argName != null ? argName : "" + i );
+                arg.parse( expr, ctx );
+                ctx.end();
+            }
+            ctx.end();
         };
+        return res.named( name );
     }
 
     static ExprNonTerminal in( char open, ExprNonTerminal body, char close )
     {
         return ( expr, ctx ) -> {
             expr.expect( open );
-            Object res = body.eval( expr, ctx );
+            body.parse( expr, ctx );
             expr.expect( close );
-            return res;
         };
     }
 
-    static ExprNonTerminal list( ExprNonTerminal of )
+    static ExprNonTerminal varargs( ExprNonTerminal of )
     {
-        return ( expr, ctx ) -> {
-            Object first = of.eval( expr, ctx );
+        ExprNonTerminal varargs = ( expr, ctx ) -> {
+            of.parse( expr, ctx );
+            // now there might be more
             expr.skipWS();
             char c = expr.peek();
-            if ( c != ',' )
+            while ( c == ',' )
             {
-                return List.of( first );
-            }
-            List<Object> list = new ArrayList<>();
-            while ( (c == ',') )
-            {
-                list.add( of.eval( expr, ctx ) );
+                expr.gobble(); // the ","
+                expr.skipWS();
+                of.parse( expr, ctx );
                 expr.skipWS();
                 c = expr.peek();
             }
-            return list;
         };
+        return varargs.maybe();
     }
 
-    static ExprNonTerminal seq( ExprNonTerminal... elements )
-    {
-        if ( elements.length == 1 )
-        {
-            return elements[0];
-        }
-        return ( expr, ctx ) -> {
-            Object[] values = new Object[elements.length];
-            for ( int i = 0; i < values.length; i++ )
-            {
-                values[i] = elements[i].eval( expr, ctx );
-            }
-            return List.of( values );
-        };
-    }
-
-    static ExprNonTerminal maybe( char when, ExprNonTerminal then )
+    static ExprNonTerminal is( String tag, ExprNonTerminal on )
     {
         return ( expr, ctx ) -> {
-            if ( expr.peek() != when )
+            if ( expr.peek( tag ) )
             {
-                return null;
+                ctx.literal( ExprType.TAG, tag );
+                expr.skipWS();
             }
-            expr.expect( when );
-            return then.eval( expr, ctx );
+            on.parse( expr, ctx );
         };
     }
 
+    static ExprNonTerminal tag( String tag, ExprNonTerminal on )
+    {
+        return ( expr, ctx ) -> {
+            tag.chars().forEachOrdered( c -> expr.expect( (char) c ) );
+            ctx.literal( ExprType.TAG, tag );
+            on.parse( expr, ctx );
+        };
+    }
+
+    static ExprNonTerminal ref( char indicator, ExprNonTerminal to )
+    {
+        return ( expr, ctx ) -> {
+            expr.skipWS();
+            expr.expect( indicator );
+            expr.expect( '{' );
+            to.parse( expr, ctx );
+            expr.expect( '}' );
+            expr.skipWS();
+        };
+    }
+
+    static ExprNonTerminal or( Map<Character, ExprNonTerminal> options )
+    {
+        return ( expr, ctx ) -> {
+            char c = expr.peek();
+            ExprNonTerminal option = options.get( c );
+            if ( option == null )
+            {
+                expr.error( "Expected one of " + options.keySet() );
+            }
+            option.parse( expr, ctx );
+        };
+    }
 }

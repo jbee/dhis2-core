@@ -3,12 +3,15 @@ package org.hisp.dhis.expression.poc;
 interface ExprContext
 {
 
-    enum ExprType
-    {FN}
+    void begin( ExprType type, String value );
 
-    void open( ExprType type, String name );
+    void end();
 
-    void close();
+    default void literal( ExprType type, String value )
+    {
+        begin( type, value );
+        end();
+    }
 
     ExprNonTerminal getTopLevelFunction( String name );
 
