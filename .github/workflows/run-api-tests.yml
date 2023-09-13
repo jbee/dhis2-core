@@ -42,7 +42,7 @@ jobs:
           password: ${{ secrets.DHIS2_BOT_DOCKER_HUB_PASSWORD }}
       
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
         
       - name: Publish docker image
         if: "contains(github.event.pull_request.labels.*.name, 'publish-docker-image')"
